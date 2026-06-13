@@ -1,0 +1,14 @@
+streamlit==1.46.1
+pandas==2.3.1
+numpy==2.3.1
+plotly==6.2.0
+openpyxl==3.1.5
+xlsxwriter==3.2.5
+scikit-learn==1.7.1
+prophet==1.1.7
+matplotlib==3.10.5
+seaborn==0.13.2
+reportlab==4.4.3
+
+ejecutar 
+C:\Users\Admin\AppData\Local\Python\pythoncore-3.14-64\python.exe -m streamlit run app.py
