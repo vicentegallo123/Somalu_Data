@@ -1,16 +1,17 @@
 import streamlit as st
+import pandas as pd
 
 from services.loader import DataLoader
 from services.kpis import KPIService
 from services.analytics import AnalyticsService
 from services.forecasting import ForecastService
 from services.discounts import DiscountService
+from services.inventory import InventoryService  
 
 from exports.export import ExportService
 from components.sales_cards import draw_metric
 from components.charts import Charts
 from components.tables import Tables
-import pandas as pd
 
 st.set_page_config(
     page_title="SOMALU Analytics",
@@ -19,23 +20,32 @@ st.set_page_config(
 
 st.title("📊 Dashboard SOMALU")
 
+# CARGE
 data = DataLoader.load_all()
 
 ventas = data["ventas"]
 productos = data["productos"]
 productos_periodo = data["productos_periodo"]
+inventario = data["inventario"]  
 
+# INIT
 kpi = KPIService(ventas)
 analytics = AnalyticsService(ventas)
 peor_dia = analytics.dia_menos_ventas_sin_lunes()
 mejor_dia = analytics.dia_mas_ventas_sin_lunes()
 discounts = DiscountService(ventas)
 
-tab1, tab2, tab3, tab4 = st.tabs([
+# Servicio de inventario y alertas
+inventory_service = InventoryService(inventario, productos_periodo)
+alertas_stock = inventory_service.alertas_reabastecimiento(dias_minimos=5)
+
+# ta
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Resumen",
     "Ventas",
     "Productos",
-    "Forecast"
+    "Forecast",
+    "Inventario"
 ])
 
 with tab1:
@@ -43,21 +53,18 @@ with tab1:
     c1, c2, c3, c4 = st.columns(4)
 
     with c1:
-           st.success(
-        f" Día con más ventas: "
-        f"{mejor_dia['DIA_SEMANA']} "
-        f"(${mejor_dia['TOTAL']:,.2f})"
-    )
+        st.success(
+            f" Día con más ventas: "
+            f"{mejor_dia['DIA_SEMANA']} "
+            f"(${mejor_dia['TOTAL']:,.2f})"
+        )
 
     with c2:
-         st.warning(
-        f" Día con menos ventas: "
-        f"{peor_dia['DIA_SEMANA']} "
-        f"(${peor_dia['TOTAL']:,.2f})"
-        
-    )
-         
-         
+        st.warning(
+            f" Día con menos ventas: "
+            f"{peor_dia['DIA_SEMANA']} "
+            f"(${peor_dia['TOTAL']:,.2f})"
+        )
 
     with c3:
         draw_metric(
@@ -126,7 +133,32 @@ with tab4:
         ),
         use_container_width=True
     )
-  
+
+
+with tab5:
+    st.subheader("📦 Inventory Status")
+    
+    # Financial KPI cards
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Items", len(inventario))
+    col2.error(f"🚨 Critical Stock: {len(alertas_stock)}")
+    col3.metric("Total Inventory Value", f"${inventario['COSTO_TOTAL'].sum():,.2f}")
+
+    # Financial analysis by department
+    st.subheader("📊 Investment by Department")
+    resumen = inventory_service.resumen_por_categoria()
+    st.dataframe(resumen, use_container_width=True)
+    
+    # Visual investment distribution
+    import plotly.express as px
+    fig = px.pie(resumen, values='COSTO_TOTAL', names='CATEGORIA', title="Investment per Category")
+    st.plotly_chart(fig, use_container_width=True)
+
+# -----------------------------------------------------
+# dowloads
+# -----------------------------------------------------
+st.markdown("---")
+
 csv = ventas.to_csv(index=False).encode('utf-8')
 
 st.download_button(
@@ -135,12 +167,13 @@ st.download_button(
     file_name='ventas_somalu.csv',
     mime='text/csv',
 )
+
 datos_resumen = pd.DataFrame({
     "Métrica": ["Ventas Totales", "Promedio Diario", "Ticket Promedio", "% Descuento"],
     "Valor": [kpi.ventas_totales(), kpi.promedio_diario(), kpi.ticket_promedio(), kpi.porcentaje_descuento()]
 })
 
-# 2. Botón de Excel
+
 st.download_button(
     label="📥 Descargar Resumen en Excel",
     data=ExportService.to_excel(datos_resumen),
@@ -148,7 +181,7 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-# 3. Botón de PDF
+
 texto_pdf = f"Ventas Totales: ${kpi.ventas_totales():,.2f} | Ticket Promedio: ${kpi.ticket_promedio():,.2f}"
 st.download_button(
     label="📥 Descargar Resumen en PDF",
